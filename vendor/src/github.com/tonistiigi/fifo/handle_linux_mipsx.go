@@ -1,6 +1,5 @@
 // +build linux
-// +build !mips
-// +build !mipsle
+// +build mips mipsle
 
 package fifo
 
@@ -20,6 +19,7 @@ type handle struct {
 	dev       uint64
 	ino       uint64
 	closeOnce sync.Once
+	name      string
 }
 
 func getHandle(fn string) (*handle, error) {
@@ -35,9 +35,10 @@ func getHandle(fn string) (*handle, error) {
 	}
 
 	h := &handle{
-		f:   f,
-		dev: stat.Dev,
-		ino: stat.Ino,
+		f:    f,
+		name: fn,
+		dev:  uint64(stat.Dev),
+		ino:  stat.Ino,
 	}
 
 	// check /proc just in case
@@ -53,12 +54,16 @@ func (h *handle) procPath() string {
 	return fmt.Sprintf("/proc/self/fd/%d", h.f.Fd())
 }
 
+func (h *handle) Name() string {
+	return h.name
+}
+
 func (h *handle) Path() (string, error) {
 	var stat syscall.Stat_t
 	if err := syscall.Stat(h.procPath(), &stat); err != nil {
 		return "", errors.Wrapf(err, "path %v could not be statted", h.procPath())
 	}
-	if stat.Dev != h.dev || stat.Ino != h.ino {
+	if uint64(stat.Dev) != h.dev || stat.Ino != h.ino {
 		return "", errors.Errorf("failed to verify handle %v/%v %v/%v", stat.Dev, h.dev, stat.Ino, h.ino)
 	}
 	return h.procPath(), nil
